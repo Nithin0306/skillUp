@@ -18,7 +18,7 @@ def home():
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173","https://skill-gap-analyser.vercel.app/"],
+    allow_origins=["https://skill-up-topaz.vercel.app/"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

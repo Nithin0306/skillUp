@@ -52,10 +52,13 @@ const Home = () => {
 
     try {
       // Resume Analysis
-      const resAnalysis = await fetch("http://localhost:8000/analyze_resume/", {
-        method: "POST",
-        body: formData,
-      });
+      const resAnalysis = await fetch(
+        "https://skillup-1-u242.onrender.com/analyze_resume/",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       if (!resAnalysis.ok) throw new Error("Resume analysis failed");
       const analysisData = await resAnalysis.json();
@@ -69,7 +72,7 @@ const Home = () => {
       // Course Recommendations
       const encodedJobTitle = encodeURIComponent(jobTitle);
       const resCourses = await fetch(
-        `http://localhost:8000/fetch_courses/${encodedJobTitle}`
+        `https://skillup-1-u242.onrender.com/fetch_courses/${encodedJobTitle}`
       );
       if (!resCourses.ok) throw new Error("Fetching courses failed");
       const courseData = await resCourses.json();
@@ -77,7 +80,7 @@ const Home = () => {
 
       // YouTube Videos
       const resVideos = await fetch(
-        `http://localhost:8000/youtube-courses/${encodedJobTitle}`
+        `https://skillup-1-u242.onrender.com/youtube-courses/${encodedJobTitle}`
       );
       if (!resVideos.ok) throw new Error("Fetching YouTube videos failed");
       const videoData = await resVideos.json();
@@ -85,7 +88,7 @@ const Home = () => {
 
       // Job Matching
       const resJobMatching = await fetch(
-        "http://localhost:8000/job_matching/",
+        "https://skillup-1-u242.onrender.com/job_matching/",
         {
           method: "POST",
           headers: {
@@ -100,7 +103,7 @@ const Home = () => {
 
       // Project Generator
       const resProjects = await fetch(
-        "http://localhost:8000/project_generator/",
+        "https://skillup-1-u242.onrender.com/project_generator/",
         {
           method: "POST",
           headers: {
