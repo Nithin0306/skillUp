@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Navbar from "./Navbar";
 import LoadingAnimation from "./LoadingAnimation";
+import { Analytics } from "@vercel/analytics/react";
 import {
   Upload,
   Sparkles,
@@ -681,7 +682,7 @@ const Home = () => {
                     <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
                       <div className="p-6">
                         <h2 className="text-xl font-semibold mb-4 flex items-center">
-                         < Youtube className="text-red-500 mr-2"/>
+                          <Youtube className="text-red-500 mr-2" />
                           YouTube Tutorials
                         </h2>
 
@@ -739,7 +740,7 @@ const Home = () => {
                     <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
                       <div className="p-6">
                         <h2 className="text-xl font-semibold mb-4 flex items-center">
-                       <BriefcaseConveyorBelt className="text-green-500 mr-2"/>
+                          <BriefcaseConveyorBelt className="text-green-500 mr-2" />
                           Job Recommendations
                         </h2>
 
@@ -828,6 +829,7 @@ const Home = () => {
                 Contact
               </a>
             </div>
+            <Analytics />
           </div>
         </footer>
       </div>

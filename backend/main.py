@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import os
 import requests
 
-app = FastAPI(root_path="/api")
+app = FastAPI()
 
 
 
@@ -18,7 +18,7 @@ def home():
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://skill-up-topaz.vercel.app/"],
+    allow_origins=["https://skill-up-topaz.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
