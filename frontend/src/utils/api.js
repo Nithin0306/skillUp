@@ -4,21 +4,18 @@
 
 // API configuration with better environment handling and process safety
 const getApiBaseUrl = () => {
-  // Safely check if process is available (for Node.js environments)
-  const isDevelopment =
-    typeof process !== "undefined" &&
-    process.env &&
-    process.env.NODE_ENV === "development";
+  // Try all possible environment variables in order of priority
+  const apiUrls = [
+    import.meta.env.VITE_API_BASE_URL, // Primary URL
+    import.meta.env.VITE_BACKEND_API, // Secondary URL
+    import.meta.env.VITE_DEV_API_URL, // Development fallback
+  ];
 
-  // Use import.meta.env for Vite or process.env for Create React App
-  const envApiUrl =
-    typeof process !== "undefined" && process.env
-      ? process.env.REACT_APP_API_BASE_URL
-      : import.meta?.env?.VITE_API_BASE_URL;
+  // Find the first defined URL
+  const activeUrl = apiUrls.find((url) => url && url.trim() !== "");
 
-  // Fallback URLs in case environment variable is not set
-  if (envApiUrl) {
-    return envApiUrl;
+  if (activeUrl) {
+    return activeUrl;
   }
 
   // Default fallback based on current location
@@ -26,33 +23,69 @@ const getApiBaseUrl = () => {
     const isLocalhost =
       window.location.hostname === "localhost" ||
       window.location.hostname === "127.0.0.1";
+
     return isLocalhost
-      ? "http://localhost:8000"
+      ? "http://localhost:8000" // Default local development URL
       : (() => {
           console.warn(
-            "⚠️ Backend API URL is not set in .env. Please define REACT_APP_BACKEND_API or VITE_BACKEND_API."
+            "⚠️ No API URL configured. Please set VITE_API_BASE_URL in your environment."
           );
           return "";
         })();
   }
 
-  // Server-side or unknown environment
   return "";
 };
 
+const getCourseraUrl = () => import.meta.env.VITE_COURSERA_API_URL || "";
+const getUdemyUrl = () => import.meta.env.VITE_UDEMY_API_URL || "";
+
 const API_BASE_URL = getApiBaseUrl();
 
-// Add console log for debugging (remove in production)
-console.log("API Base URL:", API_BASE_URL);
+// Debugging output in development
+if (import.meta.env.VITE_ENVIRONMENT !== "production") {
+  console.log("API Configuration:", {
+    environment: import.meta.env.VITE_ENVIRONMENT,
+    baseUrl: API_BASE_URL,
+    courseraUrl: getCourseraUrl(),
+    udemyUrl: getUdemyUrl(),
+    isProduction: import.meta.env.PROD,
+  });
+}
 
 // API endpoints
-export const API_ENDPOINTS = {
+export const API_ENDPOINTS = Object.freeze({
+  // Main backend endpoints
   ANALYZE_RESUME: `${API_BASE_URL}/analyze_resume/`,
   FETCH_COURSES: `${API_BASE_URL}/fetch_courses/`,
   YOUTUBE_COURSES: `${API_BASE_URL}/youtube-courses/`,
   JOB_MATCHING: `${API_BASE_URL}/job_matching/`,
   PROJECT_GENERATOR: `${API_BASE_URL}/project_generator/`,
-};
+
+  // External API endpoints
+  COURSERA_API: getCourseraUrl(),
+  UDEMY_API: getUdemyUrl(),
+
+  // Utility endpoints
+  HEALTH_CHECK: `${API_BASE_URL}/health`,
+  ENVIRONMENT: import.meta.env.VITE_ENVIRONMENT || "development",
+});
+
+// Helper function to validate URLs
+export function validateApiUrl(url) {
+  if (!url) {
+    console.error("API URL is not defined");
+    return false;
+  }
+
+  try {
+    new URL(url);
+    return true;
+  } catch (e) {
+    console.error(`Invalid API URL: ${url}`);
+    return false;
+  }
+}
 
 // Alternative course sources (fallback options)
 export const COURSE_SOURCES = {
