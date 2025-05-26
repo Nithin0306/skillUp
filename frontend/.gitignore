@@ -30,9 +30,6 @@ yarn-error.log*
 
 # Validation configuration (contains sensitive word lists)
 
-src/utils/api.js
-src/utils/errorHandler.js
-
 # IDE files
 .vscode/
 .idea/
