@@ -6,6 +6,8 @@ const About = () => {
     <div>
       <Navbar />
       <div className="min-h-screen bg-white">
+        <div className="absolute inset-0 -z-10 h-full w-full bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+        <div className="absolute left-0 right-0 top-0 -z-10 m-auto h-[310px] w-full bg-gradient-to-r from-purple-500/20 via-purple-400/5 to-purple-400/20 blur-[120px]"></div>
 
         <main className="container mx-auto px-4 py-12 md:py-24">
           <div className="max-w-4xl mx-auto">

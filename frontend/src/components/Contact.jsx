@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import Navbar from "./Navbar";
 import { Send } from "lucide-react";
@@ -42,9 +41,7 @@ const Contact = () => {
     <div>
       <Navbar />
       <div className="min-h-screen bg-white">
-        
         <div className="container mx-auto px-4 py-12">
-                  
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-10">
               <h1 className="text-3xl md:text-4xl font-bold mb-4">
@@ -140,25 +137,27 @@ const Contact = () => {
               </form>
             </div>
           </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 mb-8">
+          <div className="space-y-6 flex items-center justify-center">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 h-10 w-10 bg-purple-100 rounded-full flex items-center justify-center">
+                <Mail className="h-5 w-5 text-purple-600" />
               </div>
-              
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 mb-8">
-              <div className="space-y-6 flex items-center justify-center">
-                <div className="flex items-start gap-4">
-                  <div className="flex-shrink-0 h-10 w-10 bg-purple-100 rounded-full flex items-center justify-center">
-                    <Mail className="h-5 w-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-medium text-lg mb-1">Email Us</h3>
-                    <p className="text-gray-600 mb-1">For general inquiries:</p>
-                    <a href="mailto:info@skillup.com" className="text-purple-600 hover:underline">
-                      nithin.p.m2006@gmail.com
-                    </a>
-                
-                  </div>
-                      </div>
-                  </div>
-                  </div>
+              <div>
+                <h3 className="font-medium text-lg mb-1">Email Us</h3>
+                <p className="text-gray-600 mb-1">For general inquiries:</p>
+                <a
+                  href="mailto:info@skillup.com"
+                  className="text-purple-600 hover:underline"
+                >
+                  nithin.p.m2006@gmail.com
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <footer className="border-t bg-white mt-12">
           <div className="container mx-auto flex flex-col items-center justify-between gap-4 py-10 md:h-24 md:flex-row md:py-0">
