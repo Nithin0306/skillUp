@@ -29,7 +29,7 @@ yarn-error.log*
 .env.example
 
 # Validation configuration (contains sensitive word lists)
-src/config/validation.js
+
 src/utils/api.js
 src/utils/errorHandler.js
 
