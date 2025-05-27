@@ -31,6 +31,7 @@ const Results = () => {
   const [jobRecommendations, setJobRecommendations] = useState("");
   const [projectIdeas, setProjectIdeas] = useState("");
   const [activeTab, setActiveTab] = useState("skills");
+  const [extractedText, setExtractedText] = useState("");
   const [loadingStates, setLoadingStates] = useState({
     skills: true,
     courses: true,
@@ -41,7 +42,6 @@ const Results = () => {
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    // Get analysis data from sessionStorage
     const storedData = sessionStorage.getItem("analysisData");
     if (!storedData) {
       navigate("/");
@@ -50,183 +50,98 @@ const Results = () => {
 
     const data = JSON.parse(storedData);
     setAnalysisData(data);
-
-    // Start the analysis process
     performAnalysis(data);
   }, [navigate]);
 
   const performAnalysis = async (data) => {
     const { file, jobTitle } = data;
 
-    try {
-      // Convert base64 back to file
-      const response = await fetch(file.data);
-      const blob = await response.blob();
-      const fileObj = new File([blob], file.name, { type: file.type });
+    const response = await fetch(file.data);
+    const blob = await response.blob();
+    const fileObj = new File([blob], file.name, { type: file.type });
 
-      const formData = new FormData();
-      formData.append("file", fileObj);
-      formData.append("job_title", jobTitle);
+    const formData = new FormData();
+    formData.append("file", fileObj);
+    formData.append("job_title", jobTitle);
 
-      // Start all API calls simultaneously for better performance
-      const apiCalls = [
-        analyzeResume(formData),
-        fetchCourses(jobTitle),
-        fetchVideos(jobTitle),
-      ];
-
-      // Execute API calls with progressive updates
-      Promise.allSettled(apiCalls).then((results) => {
-        const [resumeResult, coursesResult, videosResult] = results;
-
-        if (resumeResult.status === "fulfilled") {
-          const skillsList = resumeResult.value;
-          setMissingSkills(skillsList);
-          setLoadingStates((prev) => ({ ...prev, skills: false }));
-
-          // Now fetch job matching and projects based on skills
-          Promise.allSettled([
-            fetchJobMatching(skillsList),
-            fetchProjects(skillsList),
-          ]).then(([jobResult, projectResult]) => {
-            if (jobResult.status === "fulfilled") {
-              setJobRecommendations(jobResult.value);
-              setLoadingStates((prev) => ({ ...prev, jobs: false }));
-            } else {
-              setErrors((prev) => ({
-                ...prev,
-                jobs: "Failed to load job recommendations",
-              }));
-              setLoadingStates((prev) => ({ ...prev, jobs: false }));
-            }
-
-            if (projectResult.status === "fulfilled") {
-              setProjectIdeas(projectResult.value);
-              setLoadingStates((prev) => ({ ...prev, projects: false }));
-            } else {
-              setErrors((prev) => ({
-                ...prev,
-                projects: "Failed to load project ideas",
-              }));
-              setLoadingStates((prev) => ({ ...prev, projects: false }));
-            }
-          });
-        } else {
-          setErrors((prev) => ({
-            ...prev,
-            skills: "Failed to analyze resume",
-          }));
-          setLoadingStates((prev) => ({ ...prev, skills: false }));
-        }
-
-        if (coursesResult.status === "fulfilled") {
-          setCourses(coursesResult.value);
-          setLoadingStates((prev) => ({ ...prev, courses: false }));
-        } else {
-          // Use fallback courses if API fails
-          console.log("Course API failed, using fallback courses");
-          const fallbackCourses = generateEnhancedFallbackCourses(
-            missingSkills.length > 0 ? missingSkills : [],
-            jobTitle
-          );
-          setCourses(fallbackCourses);
-          setLoadingStates((prev) => ({ ...prev, courses: false }));
-        }
-
-        if (videosResult.status === "fulfilled") {
-          setVideos(videosResult.value);
-          setLoadingStates((prev) => ({ ...prev, videos: false }));
-        } else {
-          setErrors((prev) => ({ ...prev, videos: "Failed to load videos" }));
-          setLoadingStates((prev) => ({ ...prev, videos: false }));
-        }
-      });
-    } catch (error) {
-      console.error("Error performing analysis:", error);
-      setErrors({ general: "Failed to perform analysis. Please try again." });
-    }
+    // Start all API calls
+    analyzeResume(formData, jobTitle);
+    fetchCourses(jobTitle);
+    fetchVideos(jobTitle);
   };
 
-  const analyzeResume = async (formData) => {
+  const analyzeResume = async (formData, jobTitle) => {
     try {
       const response = await fetch(API_ENDPOINTS.ANALYZE_RESUME, {
         method: "POST",
         body: formData,
       });
+
       if (!response.ok) throw new Error("Resume analysis failed");
+
       const data = await response.json();
+      const skillsList = parseSkillsResponse(data.missing_skills);
+      const extractedText = data.extracted_text || "";
 
-      // Get the raw response
-      const rawResponse = data.missing_skills;
+      setMissingSkills(skillsList);
+      setExtractedText(extractedText);
+      setLoadingStates((prev) => ({ ...prev, skills: false }));
 
-      // Enhanced parsing function to handle different formats
-      const parseSkillsResponse = (response) => {
-        if (!response || typeof response !== "string") return [];
-
-        // Remove the "Missing Skills:" header and any extra whitespace
-        let cleanedResponse = response
-          .replace(/Missing Skills:/i, "")
-          .replace(/^\s*\n/, "")
-          .trim();
-
-        // Try different parsing approaches
-        let skills = [];
-
-        // Method 1: Split by bullet points and dashes
-        if (
-          cleanedResponse.includes("•") ||
-          cleanedResponse.includes("*") ||
-          cleanedResponse.includes("-")
-        ) {
-          skills = cleanedResponse
-            .split(/[•*\-]\s*/)
-            .map((skill) => skill.trim())
-            .filter((skill) => skill.length > 0)
-            .map((skill) => {
-              // Clean up each skill - remove trailing punctuation and extra text
-              return skill
-                .replace(/:\s*.*$/, "") // Remove everything after colon
-                .replace(/$$[^)]*$$:.*$/, "") // Remove parenthetical explanations
-                .replace(/\.$/, "") // Remove trailing period
-                .trim();
-            })
-            .filter((skill) => skill.length > 0);
-        }
-
-        // Method 2: If no bullet points, try splitting by periods or newlines
-        if (skills.length === 0) {
-          skills = cleanedResponse
-            .split(/[.\n]/)
-            .map((skill) => skill.trim())
-            .filter((skill) => skill.length > 0 && skill.length < 100) // Filter out very long descriptions
-            .map((skill) => {
-              // Extract just the skill name before any description
-              const match = skill.match(/^([^(:]+)/);
-              return match ? match[1].trim() : skill.trim();
-            })
-            .filter((skill) => skill.length > 0);
-        }
-
-        return skills;
-      };
-
-      const parsedSkills = parseSkillsResponse(rawResponse);
-
-      // Add debugging to see what's happening
-      console.log("Raw response:", rawResponse);
-      console.log("Parsed skills:", parsedSkills);
-
-      // Return parsed skills, or fallback to original parsing if parsing fails
-      return parsedSkills.length > 0
-        ? parsedSkills
-        : rawResponse
-            .split("\n")
-            .filter((skill) => skill.trim() !== "")
-            .map((skill) => skill.replace(/^-\s*/, "").trim());
+      // Start dependent API calls
+      fetchJobMatching(skillsList, jobTitle, extractedText);
+      fetchProjects(skillsList);
     } catch (error) {
-      console.error("Resume analysis error:", error);
-      throw error;
+      setErrors((prev) => ({ ...prev, skills: "Failed to analyze resume" }));
+      setLoadingStates((prev) => ({ ...prev, skills: false }));
     }
+  };
+
+  const parseSkillsResponse = (response) => {
+    if (!response || typeof response !== "string") return [];
+
+    const cleanedResponse = response
+      .replace(/Missing Skills:/i, "")
+      .replace(/^\s*\n/, "")
+      .trim();
+
+    let skills = [];
+
+    if (
+      cleanedResponse.includes("•") ||
+      cleanedResponse.includes("*") ||
+      cleanedResponse.includes("-")
+    ) {
+      skills = cleanedResponse
+        .split(/[•*-]\s*/)
+        .map((skill) => skill.trim())
+        .filter((skill) => skill.length > 0)
+        .map((skill) =>
+          skill
+            .replace(/:\s*.*$/, "")
+            .replace(/\.$/, "")
+            .trim()
+        )
+        .filter((skill) => skill.length > 0);
+    }
+
+    if (skills.length === 0) {
+      skills = cleanedResponse
+        .split(/[.\n]/)
+        .map((skill) => skill.trim())
+        .filter((skill) => skill.length > 0 && skill.length < 100)
+        .map((skill) => {
+          const match = skill.match(/^([^(:]+)/);
+          return match ? match[1].trim() : skill.trim();
+        })
+        .filter((skill) => skill.length > 0);
+    }
+
+    return skills.length > 0
+      ? skills
+      : cleanedResponse
+          .split("\n")
+          .filter((skill) => skill.trim() !== "")
+          .map((skill) => skill.replace(/^-\s*/, "").trim());
   };
 
   const fetchCourses = async (jobTitle) => {
@@ -234,23 +149,19 @@ const Results = () => {
       const response = await fetch(
         `${API_ENDPOINTS.FETCH_COURSES}${encodeURIComponent(jobTitle)}`
       );
-      if (!response.ok) {
-        console.warn("Course API failed, using enhanced fallback courses");
-        throw new Error("Course API failed");
-      }
+
+      if (!response.ok) throw new Error("Course API failed");
+
       const data = await response.json();
-
-      // If API returns empty results, use fallback
-      if (!data.courses || data.courses.length === 0) {
-        console.log("API returned empty results, using fallback courses");
-        return generateEnhancedFallbackCourses(missingSkills, jobTitle);
-      }
-
-      return data.courses;
+      setCourses(
+        data.courses?.length > 0
+          ? data.courses
+          : generateEnhancedFallbackCourses(missingSkills, jobTitle)
+      );
+      setLoadingStates((prev) => ({ ...prev, courses: false }));
     } catch (error) {
-      console.error("Course fetch error:", error);
-      // Return enhanced fallback courses instead of throwing
-      return generateEnhancedFallbackCourses(missingSkills, jobTitle);
+      setCourses(generateEnhancedFallbackCourses(missingSkills, jobTitle));
+      setLoadingStates((prev) => ({ ...prev, courses: false }));
     }
   };
 
@@ -259,28 +170,45 @@ const Results = () => {
       const response = await fetch(
         `${API_ENDPOINTS.YOUTUBE_COURSES}${encodeURIComponent(jobTitle)}`
       );
-      if (!response.ok) throw new Error("Fetching videos failed");
+
+      if (!response.ok) throw new Error("Videos API failed");
+
       const data = await response.json();
-      return data.videos || [];
+      setVideos(data.videos || []);
+      setLoadingStates((prev) => ({ ...prev, videos: false }));
     } catch (error) {
-      console.error("Video fetch error:", error);
-      throw error;
+      setErrors((prev) => ({ ...prev, videos: "Failed to load videos" }));
+      setLoadingStates((prev) => ({ ...prev, videos: false }));
     }
   };
 
-  const fetchJobMatching = async (skills) => {
+  const fetchJobMatching = async (skills, jobTitle, extractedText) => {
     try {
       const response = await fetch(API_ENDPOINTS.JOB_MATCHING, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ skills }),
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          skills: skills,
+          job_title: jobTitle,
+          extracted_text: extractedText,
+        }),
       });
-      if (!response.ok) throw new Error("Job matching failed");
+
+      if (!response.ok)
+        throw new Error(`Job matching failed: ${response.status}`);
+
       const data = await response.json();
-      return data.job_recommendations;
+      setJobRecommendations(data.job_recommendations);
+      setLoadingStates((prev) => ({ ...prev, jobs: false }));
     } catch (error) {
-      console.error("Job matching error:", error);
-      throw error;
+      setErrors((prev) => ({
+        ...prev,
+        jobs: "Failed to load job recommendations",
+      }));
+      setLoadingStates((prev) => ({ ...prev, jobs: false }));
     }
   };
 
@@ -291,148 +219,137 @@ const Results = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ skills }),
       });
+
       if (!response.ok) throw new Error("Project generation failed");
+
       const data = await response.json();
-      return data.project_ideas;
+      setProjectIdeas(data.project_ideas);
+      setLoadingStates((prev) => ({ ...prev, projects: false }));
     } catch (error) {
-      console.error("Project generation error:", error);
-      throw error;
+      setErrors((prev) => ({
+        ...prev,
+        projects: "Failed to load project ideas",
+      }));
+      setLoadingStates((prev) => ({ ...prev, projects: false }));
     }
   };
 
-  // Formatting functions (same as before but with better error handling)
   const formatJobRecommendations = (text) => {
     if (!text || typeof text !== "string") return [];
 
-    try {
-      const jobSections = text.split(/\d+\.\s+/);
-      return jobSections
-        .filter((section) => section.trim().length > 0)
-        .map((section, index) => {
-          try {
-            const titleMatch = section.match(/^([^*]+)/);
-            const title = titleMatch
-              ? titleMatch[1].trim()
-              : `Job Recommendation ${index + 1}`;
+    const jobSections = text
+      .split(/\d+\.\s+/)
+      .filter((section) => section.trim().length > 0);
 
-            const descMatch = section.match(
-              /\*\s+\*\*Description:\*\*\s+(.*?)(?=\*\s+\*\*|$)/s
-            );
-            const description = descMatch
-              ? descMatch[1].trim()
-              : "Description not available";
+    return jobSections.map((section, index) => {
+      let title = "";
+      const titleMatch = section.match(/^\*\*([^*]+)\*\*/);
+      if (titleMatch) {
+        title = titleMatch[1].trim();
+      } else {
+        const firstLine = section.split("\n")[0];
+        title = firstLine.replace(/\*\*/g, "").trim();
+      }
 
-            const skillsMatch = section.match(
-              /\*\s+\*\*Key Required Skills:\*\*\s+(.*?)(?=\*\s+\*\*|$)/s
-            );
-            const skills = skillsMatch
-              ? skillsMatch[1].trim()
-              : "Skills information not available";
+      const descMatch = section.match(
+        /\*\s*\*\*Description:\*\*\s+(.*?)(?=\*\s*\*\*|$)/s
+      );
+      const description = descMatch
+        ? descMatch[1].trim()
+        : "Description not available";
 
-            const pathMatch = section.match(
-              /\*\s+\*\*Potential Career Path:\*\*\s+(.*?)(?=\*\s+\*\*|$)/s
-            );
-            const careerPath = pathMatch
-              ? pathMatch[1].trim()
-              : "Career path information not available";
+      const skillsMatch = section.match(
+        /\*\s*\*\*Key Required Skills:\*\*\s+(.*?)(?=\*\s*\*\*|$)/s
+      );
+      const skills = skillsMatch
+        ? skillsMatch[1].trim()
+        : "Skills information not available";
 
-            return {
-              title:
-                title.length > 100 ? title.substring(0, 100) + "..." : title,
-              description:
-                description.length > 300
-                  ? description.substring(0, 300) + "..."
-                  : description,
-              skills:
-                skills.length > 200 ? skills.substring(0, 200) + "..." : skills,
-              careerPath:
-                careerPath.length > 200
-                  ? careerPath.substring(0, 200) + "..."
-                  : careerPath,
-            };
-          } catch (error) {
-            return {
-              title: `Job Recommendation ${index + 1}`,
-              description: "Unable to parse job details",
-              skills: "Skills information unavailable",
-              careerPath: "Career path information unavailable",
-            };
-          }
-        });
-    } catch (error) {
-      return [];
-    }
+      const pathMatch = section.match(
+        /\*\s*\*\*Potential Career Path:\*\*\s+(.*?)(?=\*\s*\*\*|$)/s
+      );
+      const careerPath = pathMatch
+        ? pathMatch[1].trim()
+        : "Career path information not available";
+
+      return {
+        title: title || `Job Recommendation ${index + 1}`,
+        description:
+          description.length > 300
+            ? description.substring(0, 300) + "..."
+            : description,
+        skills: skills.length > 200 ? skills.substring(0, 200) + "..." : skills,
+        careerPath:
+          careerPath.length > 200
+            ? careerPath.substring(0, 200) + "..."
+            : careerPath,
+      };
+    });
   };
 
   const formatProjectIdeas = (text) => {
     if (!text || typeof text !== "string") return [];
 
-    try {
-      const projects = text.split(/\d+\.\s+Project Title:/g);
-      return projects
-        .filter((project) => project.trim().length > 0)
-        .map((project, index) => {
-          try {
-            const titleMatch = project.match(
-              /Project Title:\s*(.*?)(?=\s*Description:|$)/s
-            );
-            const title = titleMatch
-              ? titleMatch[1].trim()
-              : `Project ${index + 1}`;
+    const projectSections = text.split(/\d+\.\s+/);
+    return projectSections
+      .filter((section) => section.trim().length > 0)
+      .map((section, index) => {
+        let title = "";
+        const titleWithLabelMatch = section.match(/Project Title:\s*([^\n]+)/);
+        if (titleWithLabelMatch) {
+          title = titleWithLabelMatch[1].trim();
+        } else {
+          const firstLineMatch = section.match(/^([^\n]+)/);
+          title = firstLineMatch
+            ? firstLineMatch[1].trim()
+            : `Creative Project ${index + 1}`;
+        }
 
-            const descriptionMatch = project.match(
-              /Description:\s*(.*?)(?=\s*Key Skills Demonstrated:|$)/s
-            );
-            const description = descriptionMatch
-              ? descriptionMatch[1].trim()
-              : "Description not available";
+        title = title
+          .replace(/\*\*/g, "")
+          .replace(/Project Title:\s*/i, "")
+          .replace(/\s*Description:.*$/i, "")
+          .trim();
 
-            const skillsMatch = project.match(
-              /Key Skills Demonstrated:\s*(.*?)(?=\s*Potential Real-World Impact:|$)/s
-            );
-            const skills = skillsMatch
-              ? skillsMatch[1].trim()
-              : "Skills information not available";
+        const descriptionMatch = section.match(
+          /Description:\s*(.*?)(?=Key Skills Demonstrated:|$)/s
+        );
+        const description = descriptionMatch
+          ? descriptionMatch[1].trim()
+          : "Description not available";
 
-            const impactMatch = project.match(
-              /Potential Real-World Impact:\s*(.*?)(?=\s*Difficulty Level:|$)/s
-            );
-            const impact = impactMatch
-              ? impactMatch[1].trim()
-              : "Impact information not available";
+        const skillsMatch = section.match(
+          /Key Skills Demonstrated:\s*(.*?)(?=Potential Real-World Impact:|$)/s
+        );
+        const skills = skillsMatch
+          ? skillsMatch[1].trim()
+          : "Skills information not available";
 
-            const difficultyMatch = project.match(
-              /Difficulty Level:\s*(.*?)$/s
-            );
-            const difficulty = difficultyMatch
-              ? difficultyMatch[1].trim()
-              : "Intermediate";
+        const impactMatch = section.match(
+          /Potential Real-World Impact:\s*(.*?)(?=Difficulty Level:|$)/s
+        );
+        const impact = impactMatch
+          ? impactMatch[1].trim()
+          : "Impact information not available";
 
-            return {
-              title: title.length > 80 ? title.substring(0, 80) + "..." : title,
-              description:
-                description.length > 250
-                  ? description.substring(0, 250) + "..."
-                  : description,
-              skills:
-                skills.length > 150 ? skills.substring(0, 150) + "..." : skills,
-              impact:
-                impact.length > 150 ? impact.substring(0, 150) + "..." : impact,
-              difficulty: difficulty.length > 20 ? "Intermediate" : difficulty,
-            };
-          } catch (error) {
-            return {
-              title: `Project ${index + 1}`,
-              description: "Unable to parse project details",
-              skills: "Skills information unavailable",
-              impact: "Impact information unavailable",
-              difficulty: "Intermediate",
-            };
-          }
-        });
-    } catch (error) {
-      return [];
-    }
+        const difficultyMatch = section.match(/Difficulty Level:\s*(.*?)$/s);
+        const difficulty = difficultyMatch
+          ? difficultyMatch[1].trim()
+          : "Intermediate";
+
+        return {
+          title: title.length > 80 ? title.substring(0, 80) + "..." : title,
+          description:
+            description.length > 250
+              ? description.substring(0, 250) + "..."
+              : description,
+          skills:
+            skills.length > 150 ? skills.substring(0, 150) + "..." : skills,
+          impact:
+            impact.length > 150 ? impact.substring(0, 150) + "..." : impact,
+          difficulty: difficulty.length > 20 ? "Intermediate" : difficulty,
+        };
+      });
   };
 
   const formattedJobs = jobRecommendations
@@ -757,7 +674,7 @@ const Results = () => {
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-semibold flex items-center gap-2">
                     <Lightbulb className="h-5 w-5 text-amber-600" />
-                    Project Ideas
+                    Creative Project Ideas
                   </h2>
                   {errors.projects && (
                     <button
@@ -775,7 +692,7 @@ const Results = () => {
                     <div className="text-center">
                       <LoadingAnimation />
                       <p className="mt-4 text-gray-600">
-                        Generating project ideas...
+                        Generating creative project ideas...
                       </p>
                     </div>
                   </div>
@@ -798,7 +715,7 @@ const Results = () => {
                         className="border border-amber-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow"
                       >
                         <div className="bg-amber-50 p-4 border-b border-amber-200">
-                          <h3 className="font-semibold text-lg break-words">
+                          <h3 className="font-semibold text-lg break-words text-amber-900">
                             {project.title}
                           </h3>
                           <div className="mt-2 inline-flex items-center rounded-full border border-amber-300 px-3 py-1 text-xs font-semibold text-amber-700 bg-amber-100">
@@ -974,8 +891,8 @@ const Results = () => {
                         className="border border-green-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow"
                       >
                         <div className="bg-green-50 p-4 border-b border-green-200">
-                          <h3 className="font-semibold text-lg break-words">
-                            {job.title.replace(/\*\*/g, "")}
+                          <h3 className="font-semibold text-lg break-words text-green-900">
+                            {job.title}
                           </h3>
                         </div>
                         <div className="p-4 space-y-4">

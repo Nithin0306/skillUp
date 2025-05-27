@@ -67,6 +67,30 @@ class JobTitleRequest(BaseModel):
             raise ValueError('Job title too long (max 100 characters)')
         return v.strip()
 
+# Add new request model for job matching
+class JobMatchingRequest(BaseModel):
+    skills: List[str]
+    job_title: str
+    extracted_text: str
+    
+    @validator('skills')
+    def validate_skills(cls, v):
+        if not v or len(v) == 0:
+            raise ValueError('Skills list cannot be empty')
+        return [skill.strip() for skill in v if skill.strip()]
+    
+    @validator('job_title')
+    def validate_job_title(cls, v):
+        if not v or len(v.strip()) < 2:
+            raise ValueError('Job title must be at least 2 characters')
+        return v.strip()
+    
+    @validator('extracted_text')
+    def validate_extracted_text(cls, v):
+        if not v or len(v.strip()) < 10:
+            raise ValueError('Extracted text must be provided')
+        return v.strip()
+
 # Enhanced error handling
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
@@ -155,7 +179,6 @@ def clean_gemini_response(text):
     text = re.sub(r'\s+', ' ', text)
     
     return text.strip()
-
 @app.post("/analyze_resume/")
 async def analyze_resume(file: UploadFile = File(...), job_title: str = Form(...)):
     try:
@@ -233,8 +256,10 @@ Provide ONLY the bullet-point list, no additional text or explanations.
             logger.error(f"Gemini API error: {response.text}")
             skill_gap = "- Unable to analyze resume at this time\n- Please try again later"
 
+        # IMPORTANT: Return both missing skills AND extracted text
         return {
             "missing_skills": skill_gap,
+            "extracted_text": extracted_text,  # This is crucial for job matching
             "job_title": job_title,
             "analysis_timestamp": datetime.now().isoformat(),
             "resume_length": len(extracted_text)
@@ -472,56 +497,94 @@ def get_youtube_courses(job_title: str):
             "error": f"Failed to fetch YouTube videos: {str(e)}"
         }
 
+# FIXED: Job Matching Endpoint - Only the job matching part
 @app.post("/job_matching/")
-async def job_matching(request: SkillsRequest):
+async def job_matching(request: dict):
     try:
-        skills = request.skills
+        # Extract data from request
+        skills = request.get("skills", [])
+        job_title = request.get("job_title", "")
+        extracted_text = request.get("extracted_text", "")
         
-        # Enhanced prompt for structured job recommendations
+        # Validate inputs
+        if not skills or len(skills) == 0:
+            raise HTTPException(status_code=400, detail="Skills list cannot be empty")
+        if not job_title or len(job_title.strip()) < 2:
+            raise HTTPException(status_code=400, detail="Valid job title is required")
+        if not extracted_text or len(extracted_text.strip()) < 10:
+            raise HTTPException(status_code=400, detail="Extracted text is required")
+        
+        # FIXED: Remove hardcoded examples and let AI generate unique recommendations
         prompt = {
-    "contents": [
-        {
-            "parts": [
+            "contents": [
                 {
-                    "text": f"""
-Analyze this resume for a {job_title} position and identify missing skills.
+                    "parts": [
+                        {
+                            "text": f"""
+You are a career advisor AI. Based on the resume content and target job interest, recommend 5 unique job positions that specifically match this candidate's skills.
 
-Resume:
+RESUME CONTENT:
 {extracted_text}
 
-INSTRUCTIONS:
-- Compare resume skills against typical {job_title} requirements
-- List ONLY the missing skills
-- Use clean bullet-point format
-- Be specific and concise
-- Ignore formatting characters like * or special symbols
+CANDIDATE SKILLS: {', '.join(skills)}
+TARGET JOB INTEREST: {job_title}
 
-OUTPUT FORMAT (follow exactly):
-Missing Skills:
+ANALYSIS INSTRUCTIONS:
+1. Carefully analyze the resume to understand the candidate's actual experience level, education, and background
+2. Consider their current skills and experience when recommending positions
+3. Recommend 5 different job titles that realistically match their profile
+4. Include a mix of current-level and growth positions
+5. Make job titles creative but professional and industry-appropriate
+6. Ensure each recommendation is unique and tailored to this specific candidate
 
-• [Skill Name]
-• [Skill Name with specific tools/technologies in parentheses]
-• [Skill Name]
-• [Skill Name with examples]
-• [Skill Name]
+OUTPUT FORMAT (follow this exact structure):
+1. **[Unique Job Title Based on Candidate's Profile]**
+   * **Description:** [2-3 sentences about the role and key responsibilities tailored to their background]
+   * **Key Required Skills:** [List 6-8 specific skills needed, considering what they already have vs what they need]
+   * **Potential Career Path:** [Realistic career progression based on their current level]
 
-Example format:
-• SQL
-• Data Visualization (e.g., Tableau, Power BI)
-• Machine Learning
-• Cloud Computing (e.g., AWS, Azure, GCP)
-• Statistical Analysis
+2. **[Another Unique Job Title]**
+   * **Description:** [Role description]
+   * **Key Required Skills:** [Skills list]
+   * **Potential Career Path:** [Career progression]
 
-Provide ONLY the bullet-pointed missing skills list, no additional explanations or text.
+3. **[Third Unique Job Title]**
+   * **Description:** [Role description]
+   * **Key Required Skills:** [Skills list]
+   * **Potential Career Path:** [Career progression]
+
+4. **[Fourth Unique Job Title]**
+   * **Description:** [Role description]
+   * **Key Required Skills:** [Skills list]
+   * **Potential Career Path:** [Career progression]
+
+5. **[Fifth Unique Job Title]**
+   * **Description:** [Role description]
+   * **Key Required Skills:** [Skills list]
+   * **Potential Career Path:** [Career progression]
+
+IMPORTANT: 
+- Generate unique job titles based on this specific candidate's resume
+- Do not use generic examples
+- Tailor each recommendation to their actual experience and skills
+- Make sure job titles are realistic and achievable for their background
+- Provide ONLY the formatted job list, no additional text
+
+Generate 5 unique, personalized job recommendations now:
 """
+                        }
+                    ]
                 }
             ]
         }
-    ]
-}
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
         headers = {"Content-Type": "application/json"}
+
+        # Log the request for debugging
+        logger.info(f"Sending job matching request for job title: {job_title}")
+        logger.info(f"Skills count: {len(skills)}")
+        logger.info(f"Resume text length: {len(extracted_text)}")
 
         response = requests.post(url, headers=headers, json=prompt, timeout=30)
 
@@ -531,100 +594,82 @@ Provide ONLY the bullet-pointed missing skills list, no additional explanations 
             if "candidates" in response_json and response_json["candidates"]:
                 job_recommendations = response_json["candidates"][0]["content"]["parts"][0]["text"]
                 job_recommendations = clean_gemini_response(job_recommendations)
+                
+                # Log the response for debugging
+                logger.info(f"Job recommendations generated successfully. Length: {len(job_recommendations)}")
+                logger.info(f"First 200 chars: {job_recommendations[:200]}...")
+                
             else:
-                job_recommendations = get_fallback_job_recommendations(skills)
+                logger.warning("No candidates in Gemini response")
+                job_recommendations = "Unable to generate job recommendations at this time. Please try again."
 
         else:
-            logger.error(f"Gemini API error: {response.text}")
-            job_recommendations = get_fallback_job_recommendations(skills)
+            logger.error(f"Gemini API error: Status {response.status_code}, Response: {response.text}")
+            job_recommendations = "Unable to generate job recommendations due to API error. Please try again."
 
         return {
             "job_recommendations": job_recommendations,
             "skills_analyzed": skills,
+            "job_title": job_title,
             "analysis_timestamp": datetime.now().isoformat(),
             "total_skills": len(skills)
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Job matching error: {str(e)}")
         return {
-            "job_recommendations": get_fallback_job_recommendations(request.skills if hasattr(request, 'skills') else []),
-            "error": "Using fallback recommendations due to API limitations"
+            "job_recommendations": "Unable to generate job recommendations due to system error. Please try again.",
+            "error": str(e)
         }
-
-def get_fallback_job_recommendations(skills: List[str]) -> str:
-    """Provide fallback job recommendations when API fails"""
-    return """
-1. **Software Developer**
-   * **Description:** Design, develop, and maintain software applications using various programming languages and frameworks. Collaborate with teams to deliver high-quality solutions.
-   * **Key Required Skills:** Programming languages, Problem-solving, Version control, Testing, Debugging, Software architecture
-   * **Potential Career Path:** Junior Developer → Senior Developer → Lead Developer → Software Architect → Engineering Manager
-
-2. **Data Analyst**
-   * **Description:** Analyze complex datasets to extract meaningful insights and support business decision-making through data visualization and statistical analysis.
-   * **Key Required Skills:** SQL, Excel, Python/R, Data visualization, Statistical analysis, Business intelligence tools
-   * **Potential Career Path:** Data Analyst → Senior Data Analyst → Data Scientist → Lead Data Scientist → Head of Analytics
-
-3. **Project Coordinator**
-   * **Description:** Coordinate project activities, manage timelines, and facilitate communication between stakeholders to ensure successful project delivery.
-   * **Key Required Skills:** Project management, Communication, Organization, Risk management, Stakeholder management, Agile methodologies
-   * **Potential Career Path:** Project Coordinator → Project Manager → Senior Project Manager → Program Manager → Director of PMO
-
-4. **Digital Marketing Specialist**
-   * **Description:** Develop and execute digital marketing campaigns across various channels to increase brand awareness and drive customer engagement.
-   * **Key Required Skills:** SEO/SEM, Social media marketing, Content creation, Analytics, Email marketing, PPC advertising
-   * **Potential Career Path:** Marketing Specialist → Senior Marketing Specialist → Marketing Manager → Marketing Director → CMO
-
-5. **Business Analyst**
-   * **Description:** Bridge the gap between business needs and technical solutions by analyzing processes, gathering requirements, and recommending improvements.
-   * **Key Required Skills:** Requirements gathering, Process analysis, Documentation, Stakeholder management, SQL, Business process modeling
-   * **Potential Career Path:** Business Analyst → Senior Business Analyst → Lead Business Analyst → Product Manager → Director of Product
-"""
 
 @app.post("/project_generator/")
 async def project_generator(request: SkillsRequest):
     try:
         skills = request.skills
         
-        # Enhanced prompt for structured project ideas
+        # Enhanced prompt for API to generate creative project ideas
         prompt = {
             "contents": [
                 {
                     "parts": [
                         {
                             "text": f"""
-Generate 5 portfolio project ideas based on these skills: {', '.join(skills)}
+Generate 5 creative and innovative portfolio project ideas based on these skills: {', '.join(skills)}
 
 REQUIREMENTS:
-- Projects should be realistic and achievable
-- Focus on practical, real-world applications
+- Create unique, catchy, and professional project titles that stand out
+- Projects should be realistic and achievable for portfolio building
+- Focus on solving real-world problems with practical applications
 - Vary difficulty levels (2 Beginner, 2 Intermediate, 1 Advanced)
-- Each project should demonstrate multiple skills
-- Include modern, industry-relevant technologies
+- Each project should showcase multiple skills effectively
+- Include modern, trending technologies and approaches
+- Make project titles creative and memorable
 
 OUTPUT FORMAT (follow exactly):
-1. Project Title: [Catchy, descriptive project name]
-   Description: [2-3 sentences describing what the project does and its purpose]
+1. Project Title: [Creative, memorable project name with a unique twist]
+   Description: [2-3 sentences describing what the project does and its innovative features]
    Key Skills Demonstrated: [List 4-6 specific skills this project showcases]
-   Potential Real-World Impact: [How this project could be used in real scenarios]
+   Potential Real-World Impact: [How this project could solve real problems or create value]
    Difficulty Level: [Beginner/Intermediate/Advanced]
 
-2. Project Title: [Catchy, descriptive project name]
-   Description: [2-3 sentences describing what the project does and its purpose]
+2. Project Title: [Creative, memorable project name with a unique twist]
+   Description: [2-3 sentences describing what the project does and its innovative features]
    Key Skills Demonstrated: [List 4-6 specific skills this project showcases]
-   Potential Real-World Impact: [How this project could be used in real scenarios]
+   Potential Real-World Impact: [How this project could solve real problems or create value]
    Difficulty Level: [Beginner/Intermediate/Advanced]
 
 [Continue for all 5 projects]
 
 Example:
-1. Project Title: Smart Expense Tracker
-   Description: A web application that automatically categorizes expenses using machine learning and provides detailed spending analytics with interactive charts and budget recommendations.
-   Key Skills Demonstrated: React.js, Node.js, Machine Learning, Data Visualization, RESTful APIs, Database Design
-   Potential Real-World Impact: Helps individuals and small businesses track spending patterns, reduce unnecessary expenses, and make informed financial decisions.
+1. Project Title: MindfulMoments - AI-Powered Wellness Companion
+   Description: A smart wellness application that uses machine learning to analyze user behavior patterns and provides personalized mindfulness recommendations. Features mood tracking, guided meditation, and stress level monitoring with beautiful data visualizations.
+   Key Skills Demonstrated: Machine Learning, Data Analysis, Mobile Development, UI/UX Design, API Integration, Real-time Analytics
+   Potential Real-World Impact: Improves mental health and wellness by providing data-driven insights and personalized recommendations for stress management and mindfulness practices.
    Difficulty Level: Intermediate
 
-Provide ONLY the formatted project list, no additional text.
+Generate 5 unique project ideas with creative, catchy titles that would impress employers and showcase the candidate's skills effectively. Provide ONLY the formatted project list, no additional text.
 """
                         }
                     ]
@@ -644,11 +689,12 @@ Provide ONLY the formatted project list, no additional text.
                 project_ideas = response_json["candidates"][0]["content"]["parts"][0]["text"]
                 project_ideas = clean_gemini_response(project_ideas)
             else:
-                project_ideas = get_fallback_project_ideas(skills)
+                # Only use fallback if API response is empty
+                project_ideas = "Unable to generate project ideas at this time. Please try again."
 
         else:
             logger.error(f"Gemini API error: {response.text}")
-            project_ideas = get_fallback_project_ideas(skills)
+            project_ideas = "Unable to generate project ideas due to API error. Please try again."
 
         return {
             "project_ideas": project_ideas,
@@ -660,44 +706,9 @@ Provide ONLY the formatted project list, no additional text.
     except Exception as e:
         logger.error(f"Project generation error: {str(e)}")
         return {
-            "project_ideas": get_fallback_project_ideas(request.skills if hasattr(request, 'skills') else []),
-            "error": "Using fallback projects due to API limitations"
+            "project_ideas": "Unable to generate project ideas due to system error. Please try again.",
+            "error": str(e)
         }
-
-def get_fallback_project_ideas(skills: List[str]) -> str:
-    """Provide fallback project ideas when API fails"""
-    return """
-1. Project Title: Personal Portfolio Website
-   Description: Create a responsive portfolio website showcasing your projects, skills, and experience with modern design principles and interactive elements.
-   Key Skills Demonstrated: HTML5, CSS3, JavaScript, Responsive Design, Git, Web Hosting
-   Potential Real-World Impact: Professional online presence for job applications and networking opportunities.
-   Difficulty Level: Beginner
-
-2. Project Title: Task Management Dashboard
-   Description: Build a full-stack web application for managing tasks and projects with user authentication, real-time updates, and data visualization.
-   Key Skills Demonstrated: Frontend Framework, Backend API, Database Design, Authentication, Real-time Features, Data Visualization
-   Potential Real-World Impact: Improves productivity for teams and individuals by providing organized task tracking and progress monitoring.
-   Difficulty Level: Intermediate
-
-3. Project Title: E-commerce Product Catalog
-   Description: Develop a product catalog system with search functionality, filtering options, shopping cart, and payment integration.
-   Key Skills Demonstrated: Database Management, API Development, Payment Integration, Search Optimization, Security, User Experience Design
-   Potential Real-World Impact: Enables small businesses to sell products online and reach a wider customer base.
-   Difficulty Level: Intermediate
-
-4. Project Title: Weather Analytics App
-   Description: Create a mobile-responsive application that fetches weather data from APIs and provides detailed analytics and forecasting with interactive charts.
-   Key Skills Demonstrated: API Integration, Data Processing, Mobile Development, Chart Libraries, Responsive Design, Performance Optimization
-   Potential Real-World Impact: Helps users make informed decisions about outdoor activities and travel planning.
-   Difficulty Level: Beginner
-
-5. Project Title: AI-Powered Content Management System
-   Description: Build an advanced CMS with AI features for content generation, SEO optimization, and automated social media posting with analytics dashboard.
-   Key Skills Demonstrated: Machine Learning Integration, Content Management, SEO, Social Media APIs, Analytics, Cloud Services, Microservices Architecture
-   Potential Real-World Impact: Streamlines content creation and marketing workflows for businesses and content creators.
-   Difficulty Level: Advanced
-"""
-
 # Rate limiting middleware (basic implementation)
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
