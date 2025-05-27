@@ -237,40 +237,47 @@ const Results = () => {
   const formatJobRecommendations = (text) => {
     if (!text || typeof text !== "string") return [];
 
+    // Split by numbered sections (1., 2., 3., etc.)
     const jobSections = text
       .split(/\d+\.\s+/)
       .filter((section) => section.trim().length > 0);
 
     return jobSections.map((section, index) => {
+      // Extract title - everything before "Description:"
       let title = "";
       const titleMatch = section.match(/^\*\*([^*]+)\*\*/);
       if (titleMatch) {
         title = titleMatch[1].trim();
       } else {
-        const firstLine = section.split("\n")[0];
-        title = firstLine.replace(/\*\*/g, "").trim();
+        // If no bold formatting, take the first line before "Description:"
+        const beforeDesc = section.split(/Description:/)[0];
+        title = beforeDesc.replace(/\*\*/g, "").trim();
       }
 
+      // Extract description - between "Description:" and "Key Required Skills:"
+      let description = "Description not available";
       const descMatch = section.match(
-        /\*\s*\*\*Description:\*\*\s+(.*?)(?=\*\s*\*\*|$)/s
+        /Description:\s*(.*?)(?=Key Required Skills:|$)/s
       );
-      const description = descMatch
-        ? descMatch[1].trim()
-        : "Description not available";
+      if (descMatch) {
+        description = descMatch[1].trim();
+      }
 
+      // Extract skills - between "Key Required Skills:" and "Potential Career Path:"
+      let skills = "Skills information not available";
       const skillsMatch = section.match(
-        /\*\s*\*\*Key Required Skills:\*\*\s+(.*?)(?=\*\s*\*\*|$)/s
+        /Key Required Skills:\s*(.*?)(?=Potential Career Path:|$)/s
       );
-      const skills = skillsMatch
-        ? skillsMatch[1].trim()
-        : "Skills information not available";
+      if (skillsMatch) {
+        skills = skillsMatch[1].trim();
+      }
 
-      const pathMatch = section.match(
-        /\*\s*\*\*Potential Career Path:\*\*\s+(.*?)(?=\*\s*\*\*|$)/s
-      );
-      const careerPath = pathMatch
-        ? pathMatch[1].trim()
-        : "Career path information not available";
+      // Extract career path - after "Potential Career Path:"
+      let careerPath = "Career path information not available";
+      const pathMatch = section.match(/Potential Career Path:\s*(.*?)$/s);
+      if (pathMatch) {
+        careerPath = pathMatch[1].trim();
+      }
 
       return {
         title: title || `Job Recommendation ${index + 1}`,
