@@ -18,12 +18,12 @@ const Navbar = () => {
  backdrop-blur"
     >
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
-        <div className="flex items-center gap-2 ">
+        <NavLink to="/" className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100">
             <ChevronUp className="h-4 w-4 text-purple-600" />
           </div>
           <span className="text-xl font-bold">Skill Up</span>
-        </div>
+        </NavLink>
 
         {/* Mobile menu button */}
         <button
