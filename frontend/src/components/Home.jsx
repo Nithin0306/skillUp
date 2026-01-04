@@ -423,7 +423,7 @@ const Home = () => {
       <Navbar />
       <div className="min-h-screen bg-white">
         {/* Hero Section */}
-        <div className="container mx-auto px-4 py-16 md:py-24">
+        <div className="container mx-auto px-4 pt-24 pb-16 md:py-24">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
               <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-4">

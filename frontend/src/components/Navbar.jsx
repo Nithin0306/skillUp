@@ -27,7 +27,7 @@ const Navbar = () => {
 
         {/* Mobile menu button */}
         <button
-          className="md:hidden flex items-center"
+          className="md:hidden flex items-center cursor-pointer hover:text-purple-200 transition-colors"
           onClick={toggleMenu}
           aria-label="Toggle menu"
         >
@@ -85,7 +85,7 @@ const Navbar = () => {
 
         {/* Mobile navigation */}
         {isMenuOpen && (
-          <div className="absolute top-16 left-0 right-0 bg-white border-b shadow-md md:hidden">
+          <div className="absolute top-16 left-0 right-0 bg-white border-b shadow-md md:hidden animate-slide-down">
             <nav className="flex flex-col py-4">
               <NavLink
                 to="/"
@@ -113,12 +113,23 @@ const Navbar = () => {
                 to="/features"
                 className={({ isActive }) =>
                   isActive
-                    ? "text-white bg-white-50 px-4 py-3 font-medium"
-                    : "text-white hover:bg-gray-50 px-4 py-3 transition-colors"
+                    ? "text-gray-900 bg-purple-50 px-4 py-3 font-medium"
+                    : "text-gray-600 hover:bg-gray-50 px-4 py-3 transition-colors"
                 }
                 onClick={() => setIsMenuOpen(false)}
               >
                 Features
+              </NavLink>
+              <NavLink
+                to="/contact"
+                className={({ isActive }) =>
+                  isActive
+                    ? "text-gray-900 bg-purple-50 px-4 py-3 font-medium"
+                    : "text-gray-600 hover:bg-gray-50 px-4 py-3 transition-colors"
+                }
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Contact
               </NavLink>
             </nav>
           </div>
